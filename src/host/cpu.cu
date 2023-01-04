@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
-#include "kernel.cuh"
-#include "utils.cuh"
+#include "../kernel.cuh"
+#include "../utils.cuh"
 
 void convertRgb2Gray(uchar3 *inPixels, int width, int height, int *out)
 {
