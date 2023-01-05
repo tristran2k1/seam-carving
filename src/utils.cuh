@@ -8,6 +8,19 @@
 
 using namespace std;
 
+void copyRow(uchar3 *inPixels, int width, int height, int delimIdx, int rowIdx, uchar3 *outPixels)
+{
+    int idx = -1;
+    int outIdx = rowIdx * (width - 1);
+    for (int i = 0; i < width; i++)
+    {
+        if (i == delimIdx)
+            continue;
+        idx = width * rowIdx + i;
+        outPixels[outIdx++] = inPixels[idx];
+    }
+}
+
 char *intToStr(int data)
 {
     string strData = to_string(data);

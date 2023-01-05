@@ -109,19 +109,6 @@ void findSeam(int *energy, int width, int height, int &seamIdx, int *path)
     // printf("CPU min val: %d\n", minSeamCost);
 }
 
-void copyRow(uchar3 *inPixels, int width, int height, int delimIdx, int rowIdx, uchar3 *outPixels)
-{
-    int idx = -1;
-    int outIdx = rowIdx * (width - 1);
-    for (int i = 0; i < width; i++)
-    {
-        if (i == delimIdx)
-            continue;
-        idx = width * rowIdx + i;
-        outPixels[outIdx++] = inPixels[idx];
-    }
-}
-
 // Convert image to grayscale kernel
 __global__ void convertRgb2Gray_kernel(uchar3 *inPixels, int width, int height, int *outPixels)
 {
