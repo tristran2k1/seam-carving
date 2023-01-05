@@ -179,7 +179,6 @@ void applySeamCarving(uchar3 *inPixels, int width, int height, int nSeams, uchar
 
 int main(int argc, char ** argv) {
     int blocksize = 32;
-    char gpu_savepath[] = "gpu_1.pnm";
     GpuTimer timer;
 
     int width, height;
