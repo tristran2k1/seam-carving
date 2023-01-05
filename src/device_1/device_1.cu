@@ -187,6 +187,8 @@ int main(int argc, char ** argv) {
     uchar3 *outPixels = NULL;
     int nSeams = atoi(argv[3]);
     readPnm(argv[1], width, height, inPixels);
+    char * outFileNameBase = strtok(argv[2], ".");
+
     for (int i = 0; i < 1; i++)
     {
 
@@ -197,6 +199,6 @@ int main(int argc, char ** argv) {
         float kernelTime = timer.Elapsed();
         printf("Version GPU 1, %d seams: %f ms\n", nSeams, kernelTime);
 
-        writePnm(outPixels, width - nSeams, height, gpu_savepath);
+        writePnm(outPixels, width - nSeams, height,  concatStr(outFileNameBase, "_dv1.pnm"));
     }
 }
