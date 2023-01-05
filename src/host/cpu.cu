@@ -19,6 +19,18 @@ void convertRgb2Gray(uchar3 *inPixels, int width, int height, int *out)
     }
 }
 
+void removeSeam(uchar3 *inPixels, int width, int height, int seamIdx, int *path, uchar3 *outPixels)
+{
+    int delimIdx = seamIdx;
+    copyRow(inPixels, width, height, delimIdx, 0, outPixels);
+
+    for (int i = 1; i < height; i++)
+    {
+        delimIdx = path[(i - 1) * width + delimIdx];
+        copyRow(inPixels, width, height, delimIdx, i, outPixels);
+    }
+}
+
 void calConvolution(int *grayPixels, int width, int height, float *filter, int filterWidth, int *outPixels)
 {
     for (int y = 0; y < height; y++)
@@ -57,81 +69,6 @@ void calEnergies(int *gx, int *gy, int width, int height, int *energies)
             int idx = width * y + x;
             energies[idx] = sqrt(gx[idx] * gx[idx] + gy[idx] * gy[idx]);
         }
-    }
-}
-
-int getMinCost(int *energy, int width, int height, int x, int y)
-{
-    int minEnergy = INT_MAX;
-    int minIdx = -1;
-    int neighbor[3] = {-1, 0, 1};
-    for (int i = 0; i < 3; i++)
-    {
-        int x_ = min(max(0, x + neighbor[i]), width - 1);
-        int y_ = y + 1;
-
-        int cost = energy[width * y_ + x_] + energy[width * y + x];
-        if (cost < minEnergy)
-        {
-            minEnergy = cost;
-            minIdx = x_;
-        }
-    }
-
-    energy[width * y + x] = minEnergy;
-    return minIdx;
-}
-
-void findSeam(int *energy, int width, int height, int &seamIdx, int *path)
-{
-    // 1. dp
-    for (int y = height - 2; y >= 0; y--)
-    {
-        for (int x = 0; x < width; x++)
-        {
-            int minIdx = getMinCost(energy, width, height, x, y);
-            path[width * y + x] = minIdx;
-        }
-    }
-
-    // 2. Choose min seam
-    int minSeamIdx = -1;
-    int minSeamCost = INT_MAX;
-    for (int i = 0; i < width; i++)
-    {
-        if (energy[i] < minSeamCost)
-        {
-            minSeamCost = energy[i];
-            minSeamIdx = i;
-        }
-    }
-
-    seamIdx = minSeamIdx;
-    // printf("CPU min val: %d\n", minSeamCost);
-}
-
-void copyRow(uchar3 *inPixels, int width, int height, int delimIdx, int rowIdx, uchar3 *outPixels)
-{
-    int idx = -1;
-    int outIdx = rowIdx * (width - 1);
-    for (int i = 0; i < width; i++)
-    {
-        if (i == delimIdx)
-            continue;
-        idx = width * rowIdx + i;
-        outPixels[outIdx++] = inPixels[idx];
-    }
-}
-
-void removeSeam(uchar3 *inPixels, int width, int height, int seamIdx, int *path, uchar3 *outPixels)
-{
-    int delimIdx = seamIdx;
-    copyRow(inPixels, width, height, delimIdx, 0, outPixels);
-
-    for (int i = 1; i < height; i++)
-    {
-        delimIdx = path[(i - 1) * width + delimIdx];
-        copyRow(inPixels, width, height, delimIdx, i, outPixels);
     }
 }
 

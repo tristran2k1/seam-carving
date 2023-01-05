@@ -1,226 +1,202 @@
 #include <stdio.h>
 #include <stdint.h>
-#include "kernel.cuh"
-#include "utils.cuh"
+#include "../kernel.cuh"
+#include "../utils.cuh"
 
-void convertRgb2Gray(uchar3 *inPixels, int width, int height, int *out)
-{
-    for (int r = 0; r < height; r++)
+__global__ void blurImg_kernel_v1(int *inPixels, int width, int height, int *outPixels){
+    int ix = threadIdx.x + blockIdx.x * blockDim.x;
+    int iy = threadIdx.y + blockIdx.y * blockDim.y;
+
+    // apply convolution on each pixel
+    if (ix < width && iy < height)
     {
-        for (int c = 0; c < width; c++)
-        {
-            int i = r * width + c;
-            int r = inPixels[i].x;
-            int g = inPixels[i].y;
-            int b = inPixels[i].z;
-            out[i] = int(0.299f * r + 0.587f * g + 0.114f * b);
-            ;
-        }
-    }
-}
+        int idx_1d = iy * width + ix;
+        int ele = 0;
 
-void calConvolution(int *grayPixels, int width, int height, float *filter, int filterWidth, int *outPixels)
-{
-    for (int y = 0; y < height; y++)
-    {
-        for (int x = 0; x < width; x++)
+        for (int dy = -BLUR_KERNEL_SIZE / 2; dy <= BLUR_KERNEL_SIZE / 2; dy++)
         {
-            int idx_1d = y * width + x;
-            int ele = 0;
-
-            for (int dy = -filterWidth / 2; dy <= filterWidth / 2; dy++)
+            for (int dx = -BLUR_KERNEL_SIZE / 2; dx <= BLUR_KERNEL_SIZE / 2; dx++)
             {
-                for (int dx = -filterWidth / 2; dx <= filterWidth / 2; dx++)
-                {
-                    int conv_x = max(min(x + dx, width - 1), 0);
-                    int conv_y = max(min(y + dy, height - 1), 0);
 
-                    int filter_x = dx + filterWidth / 2;
-                    int filter_y = dy + filterWidth / 2;
-                    float ele_conv = filter[filter_y * filterWidth + filter_x];
+                int conv_x = max(min(ix + dx, width - 1), 0);
+                int conv_y = max(min(iy + dy, height - 1), 0);
+                int filter_x = dx + BLUR_KERNEL_SIZE / 2;
+                int filter_y = dy + BLUR_KERNEL_SIZE / 2;
+                float ele_conv = DEVICE_BLUR_KERNEL[filter_y * BLUR_KERNEL_SIZE + filter_x];
 
-                    ele += int(grayPixels[conv_y * width + conv_x] * ele_conv);
-                }
+                ele += int(inPixels[conv_y * width + conv_x] * ele_conv);
             }
-
-            outPixels[idx_1d] = (int)ele;
         }
+
+        outPixels[idx_1d] = ele;
     }
 }
 
-void calEnergies(int *gx, int *gy, int width, int height, int *energies)
+__global__ void calcEnergyMap_kernel_v1(int *inPixels, int width, int height, int *outPixels)
 {
-    for (int y = 0; y < height; y++)
+    int ix = threadIdx.x + blockIdx.x * blockDim.x;
+    int iy = threadIdx.y + blockIdx.y * blockDim.y;
+
+    // apply convolution on each pixel
+    if (ix < width && iy < height)
     {
-        for (int x = 0; x < width; x++)
+        int idx_1d = iy * width + ix;
+        int ele_x = 0, ele_y = 0;
+
+        for (int dy = -SOBEL_KERNEL_SIZE / 2; dy <= SOBEL_KERNEL_SIZE / 2; dy++)
         {
-            int idx = width * y + x;
-            energies[idx] = sqrt(gx[idx] * gx[idx] + gy[idx] * gy[idx]);
+            for (int dx = -SOBEL_KERNEL_SIZE / 2; dx <= SOBEL_KERNEL_SIZE / 2; dx++)
+            {
+
+                int conv_x = max(min(ix + dx, width - 1), 0);
+                int conv_y = max(min(iy + dy, height - 1), 0);
+                int filter_x = dx + SOBEL_KERNEL_SIZE / 2;
+                int filter_y = dy + SOBEL_KERNEL_SIZE / 2;
+
+                int ele_gx = DEVICE_SOBELX_KERNEL[filter_y * SOBEL_KERNEL_SIZE + filter_x];
+                int ele_gy = DEVICE_SOBELY_KERNEL[filter_y * SOBEL_KERNEL_SIZE + filter_x];
+
+                ele_x += int(inPixels[conv_y * width + conv_x] * ele_gx);
+                ele_y += int(inPixels[conv_y * width + conv_x] * ele_gy);
+            }
         }
+
+        outPixels[idx_1d] = (int)sqrt(float(ele_x * ele_x + ele_y * ele_y));
     }
 }
 
-int getMinCost(int *energy, int width, int height, int x, int y)
+void removeSingleSeam(uchar3 *inPixels, int width, int height, int seam_order, uchar3 *outPixels, int blocksize)
 {
-    int minEnergy = INT_MAX;
-    int minIdx = -1;
-    int neighbor[3] = {-1, 0, 1};
-    for (int i = 0; i < 3; i++)
-    {
-        int x_ = min(max(0, x + neighbor[i]), width - 1);
-        int y_ = y + 1;
-
-        int cost = energy[width * y_ + x_] + energy[width * y + x];
-        if (cost < minEnergy)
-        {
-            minEnergy = cost;
-            minIdx = x_;
-        }
-    }
-
-    energy[width * y + x] = minEnergy;
-    return minIdx;
-}
-
-void findSeam(int *energy, int width, int height, int &seamIdx, int *path)
-{
-    // 1. dp
-    for (int y = height - 2; y >= 0; y--)
-    {
-        for (int x = 0; x < width; x++)
-        {
-            int minIdx = getMinCost(energy, width, height, x, y);
-            path[width * y + x] = minIdx;
-        }
-    }
-
-    // 2. Choose min seam
-    int minSeamIdx = -1;
-    int minSeamCost = INT_MAX;
-    for (int i = 0; i < width; i++)
-    {
-        if (energy[i] < minSeamCost)
-        {
-            minSeamCost = energy[i];
-            minSeamIdx = i;
-        }
-    }
-
-    seamIdx = minSeamIdx;
-    // printf("CPU min val: %d\n", minSeamCost);
-}
-
-void copyRow(uchar3 *inPixels, int width, int height, int delimIdx, int rowIdx, uchar3 *outPixels)
-{
-    int idx = -1;
-    int outIdx = rowIdx * (width - 1);
-    for (int i = 0; i < width; i++)
-    {
-        if (i == delimIdx)
-            continue;
-        idx = width * rowIdx + i;
-        outPixels[outIdx++] = inPixels[idx];
-    }
-}
-
-void removeSeam(uchar3 *inPixels, int width, int height, int seamIdx, int *path, uchar3 *outPixels)
-{
-    int delimIdx = seamIdx;
-    copyRow(inPixels, width, height, delimIdx, 0, outPixels);
-
-    for (int i = 1; i < height; i++)
-    {
-        delimIdx = path[(i - 1) * width + delimIdx];
-        copyRow(inPixels, width, height, delimIdx, i, outPixels);
-    }
-}
-
-void applySeamCarving(uchar3 *inPixels, int width, int height, int nSeams, uchar3 *&outPixels)
-{
+    dim3 blockSize(blocksize, blocksize);
+    // 0. Preparation
+    /* Declare variables */
     uchar3 *src = inPixels;
-    uchar3 *out = (uchar3 *)malloc((width - 1) * height * sizeof(uchar3));
-    ;
-    // int outHeight = height;
-    int srcWidth = width, srcHeight = height;
+
+    // Variables
+    uchar3 *d_src;
+    int *d_src_gray, *d_src_blur, *d_energies;
+
+    int *min_path = (int *)malloc(height * sizeof(int));
+    int *min_row0 = (int *)malloc(width * sizeof(int));
+    int *min_array = (int *)malloc(width * height * sizeof(int));
+
+    size_t pixelsSize_3channels = width * height * sizeof(uchar3);
+    size_t pixelsSize_1channels = width * height * sizeof(int);
+
+    CHECK(cudaMalloc(&d_src, pixelsSize_3channels));
+    CHECK(cudaMemcpy(d_src, src, pixelsSize_3channels, cudaMemcpyHostToDevice));
+
+    // 1. Convert img to gray
+    CHECK(cudaMalloc(&d_src_gray, pixelsSize_1channels));
+    dim3 gridSize_gray((width - 1) / blockSize.x + 1, (height - 1) / blockSize.y + 1);
+
+    convertRgb2Gray_kernel<<<gridSize_gray, blockSize>>>(d_src, width, height, d_src_gray);
+
+    // 2. Blur gray img
+    CHECK(cudaMalloc(&d_src_blur, pixelsSize_1channels));
+    dim3 gridSize_blur((width - 1) / blockSize.x + 1, (height - 1) / blockSize.y + 1);
+
+    blurImg_kernel_v1<<<gridSize_blur, blockSize>>>(d_src_gray, width, height, d_src_blur);
+
+    // 3. Calc Energies
+    CHECK(cudaMalloc(&d_energies, pixelsSize_1channels));
+
+    calcEnergyMap_kernel_v1<<<gridSize_blur, blockSize>>>(d_src_blur, width, height, d_energies);
+
+    int *energy = (int *)malloc(pixelsSize_1channels);
+    CHECK(cudaMemcpy(energy, d_energies, pixelsSize_1channels, cudaMemcpyDeviceToHost));
+
+    // 4. Find min cost each row iteratively (dp - iterative)
+    int min_seam_idx = -1;
+    findSeam(energy, width, height, min_seam_idx, min_array);
+
+    if (min_seam_idx == -1)
+    {
+        printf("cannot find min seam at %d\n", seam_order);
+    }
+
+    // 5. Calculate min col idx on each row
+    min_path[0] = min_seam_idx;
+
+    for (int i = 1; i < height; ++i)
+    {
+        min_path[i] = min_array[(i - 1) * width + min_path[i - 1]];
+    }
+
+    // 6. Remove scene
+    uchar3 *d_output;
+    int *d_min_path;
+
+    CHECK(cudaMalloc(&d_output, (width - 1) * height * sizeof(uchar3)));
+    CHECK(cudaMalloc(&d_min_path, height * sizeof(int)));
+    CHECK(cudaMemcpy(d_min_path, min_path, height * sizeof(int), cudaMemcpyHostToDevice));
+
+    removeSeam<<<gridSize_blur, blockSize>>>(d_src, width, height, d_min_path, d_output);
+    CHECK(cudaMemcpy(outPixels, d_output, (width - 1) * height * sizeof(uchar3), cudaMemcpyDeviceToHost));
+
+    // Clean memory
+    CHECK(cudaFree(d_src));
+    CHECK(cudaFree(d_energies));
+    CHECK(cudaFree(d_src_blur));
+    CHECK(cudaFree(d_src_gray));
+
+    CHECK(cudaFree(d_output));
+    CHECK(cudaFree(d_min_path));
+
+    free(min_array);
+    free(min_path);
+    free(min_row0);
+}
+
+void applySeamCarving(uchar3 *inPixels, int width, int height, int nSeams, uchar3 *&outPixels, int blocksize)
+{
     float *gx, *gy;
     createSobelFilters(gx, gy);
-
     float *gaussFilter;
     createGaussianFilter(gaussFilter);
 
-    for (int i = 1; i <= nSeams; i++)
+    // copy data to CMEM
+    CHECK(cudaMemcpyToSymbol(DEVICE_BLUR_KERNEL, gaussFilter, BLUR_KERNEL_SIZE * BLUR_KERNEL_SIZE * sizeof(float)));
+    CHECK(cudaMemcpyToSymbol(DEVICE_SOBELX_KERNEL, gx, SOBEL_KERNEL_SIZE * SOBEL_KERNEL_SIZE * sizeof(float)));
+    CHECK(cudaMemcpyToSymbol(DEVICE_SOBELY_KERNEL, gy, SOBEL_KERNEL_SIZE * SOBEL_KERNEL_SIZE * sizeof(float)));
+
+    int step_width = 0;
+    uchar3 *src = inPixels;
+
+    for (int seam_order = 0; seam_order < nSeams; seam_order++)
     {
-        int outWidth = width - i;
-        if (i > 1)
-        {
-            out = (uchar3 *)realloc(out, outWidth * height * sizeof(uchar3));
-        }
+        step_width = width - seam_order;
+        if (seam_order == 0)
+            outPixels = (uchar3 *)malloc((step_width - 1) * height * sizeof(uchar3));
+        else
+            outPixels = (uchar3 *)realloc(outPixels, (step_width - 1) * height * sizeof(uchar3));
 
-        // 1. Convert img to grayscale
-        int *grayscaleImg = (int *)malloc(srcWidth * srcHeight * sizeof(int));
-        convertRgb2Gray(src, srcWidth, srcHeight, grayscaleImg);
+        removeSingleSeam(src, step_width, height, seam_order + 1, outPixels, blocksize);
 
-        // 2. Calculate energy value for each pixels: blur --> dx, dy --> energy = |dx| + |dy|
-        int *blurImg = (int *)malloc(srcWidth * srcHeight * sizeof(int));
-        calConvolution(grayscaleImg, srcWidth, srcHeight, gaussFilter, BLUR_KERNEL_SIZE, blurImg);
-
-        int *dx = (int *)malloc(srcWidth * srcHeight * sizeof(int));
-        int *dy = (int *)malloc(srcWidth * srcHeight * sizeof(int));
-
-        calConvolution(blurImg, srcWidth, srcHeight, gx, SOBEL_KERNEL_SIZE, dx);
-        calConvolution(blurImg, srcWidth, srcHeight, gy, SOBEL_KERNEL_SIZE, dy);
-
-        int *energy = (int *)malloc(srcWidth * srcHeight * sizeof(int));
-        calEnergies(dx, dy, srcWidth, srcHeight, energy);
-
-        // 3. Find seam given energy values above
-
-        int *path = (int *)malloc(srcWidth * srcHeight * sizeof(int));
-        int seamIdx = -1;
-        findSeam(energy, srcWidth, srcHeight, seamIdx, path);
-
-        // 4. Remove seam
-        removeSeam(src, srcWidth, srcHeight, seamIdx, path, out);
-
-        // 5. Reassign variables for next iteration
-        src = out;
-        srcWidth--;
-
-        free(grayscaleImg);
-        free(blurImg);
-        free(energy);
-        free(path);
-        free(dx);
-        free(dy);
+        src = outPixels;
     }
-
-    outPixels = out;
-
-    // Free allocated memory
-    free(gx);
-    free(gy);
-    free(gaussFilter);
 }
 
 int main(int argc, char ** argv) {
+    int blocksize = 32;
+    char gpu_savepath[] = "gpu_1.pnm";
     GpuTimer timer;
 
     int width, height;
     uchar3 *inPixels = NULL;
     uchar3 *outPixels = NULL;
-
-    readPnm(argv[1], width, height, inPixels);
-    char * outFileNameBase = strtok(argv[2], ".");
     int nSeams = atoi(argv[3]);
-
+    readPnm(argv[1], width, height, inPixels);
     for (int i = 0; i < 1; i++)
     {
 
         timer.Start();
-        applySeamCarving(inPixels, width, height, nSeams, outPixels);
+        applySeamCarving(inPixels, width, height, nSeams, outPixels, blocksize);
         timer.Stop();
 
-        printf("Version CPU, %d seams: %f ms\n", nSeams, timer.Elapsed());
-        writePnm(outPixels, width - nSeams, height, concatStr(outFileNameBase, "_host.pnm"));
+        float kernelTime = timer.Elapsed();
+        printf("Version GPU 1, %d seams: %f ms\n", nSeams, kernelTime);
+
+        writePnm(outPixels, width - nSeams, height, gpu_savepath);
     }
 }
