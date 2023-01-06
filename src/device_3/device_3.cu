@@ -112,6 +112,35 @@ __global__ void calcEnergyMap_kernel_v2(int *inPixels, int width, int height, in
     }
 }
 
+// compute min energy for a row
+__global__ void computeMinEnergyRow_kernel(int *energy, int width, int height, int row, int *minIds)
+{
+    int ix = threadIdx.x + blockDim.x * blockIdx.x;
+    int y = row;
+    int x = ix;
+    int minEnergy = INT_MAX;
+    int minIdx = -1;
+    int neighbors[3] = {-1, 0, 1};
+    if (ix < width)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            int x_ = min(max(0, ix + neighbors[i]), width - 1);
+            int y_ = y + 1;
+
+            int cost = energy[width * y_ + x_] + energy[width * y + x];
+            if (cost < minEnergy)
+            {
+                minEnergy = cost;
+                minIdx = x_;
+            }
+        }
+
+        minIds[row * width + ix] = minIdx;
+        energy[row * width + ix] = minEnergy;
+    }
+}
+
 void removeSingleSeam(uchar3 *inPixels, int width, int height, int seam_order, uchar3 *outPixels, int blocksize)
 {
     dim3 blockSize(blocksize, blocksize);
