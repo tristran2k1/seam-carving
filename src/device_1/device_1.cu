@@ -3,35 +3,6 @@
 #include "../kernel.cuh"
 #include "../utils.cuh"
 
-__global__ void blurImg_kernel_v1(int *inPixels, int width, int height, int *outPixels){
-    int ix = threadIdx.x + blockIdx.x * blockDim.x;
-    int iy = threadIdx.y + blockIdx.y * blockDim.y;
-
-    // apply convolution on each pixel
-    if (ix < width && iy < height)
-    {
-        int idx_1d = iy * width + ix;
-        int ele = 0;
-
-        for (int dy = -BLUR_KERNEL_SIZE / 2; dy <= BLUR_KERNEL_SIZE / 2; dy++)
-        {
-            for (int dx = -BLUR_KERNEL_SIZE / 2; dx <= BLUR_KERNEL_SIZE / 2; dx++)
-            {
-
-                int conv_x = max(min(ix + dx, width - 1), 0);
-                int conv_y = max(min(iy + dy, height - 1), 0);
-                int filter_x = dx + BLUR_KERNEL_SIZE / 2;
-                int filter_y = dy + BLUR_KERNEL_SIZE / 2;
-                float ele_conv = DEVICE_BLUR_KERNEL[filter_y * BLUR_KERNEL_SIZE + filter_x];
-
-                ele += int(inPixels[conv_y * width + conv_x] * ele_conv);
-            }
-        }
-
-        outPixels[idx_1d] = ele;
-    }
-}
-
 __global__ void calcEnergyMap_kernel_v1(int *inPixels, int width, int height, int *outPixels)
 {
     int ix = threadIdx.x + blockIdx.x * blockDim.x;
@@ -96,7 +67,7 @@ void removeSingleSeam(uchar3 *inPixels, int width, int height, int seam_order, u
     CHECK(cudaMalloc(&d_src_blur, pixelsSize_1channels));
     dim3 gridSize_blur((width - 1) / blockSize.x + 1, (height - 1) / blockSize.y + 1);
 
-    blurImg_kernel_v1<<<gridSize_blur, blockSize>>>(d_src_gray, width, height, d_src_blur);
+    blurImg_kernel<<<gridSize_blur, blockSize>>>(d_src_gray, width, height, d_src_blur);
 
     // 3. Calc Energies
     CHECK(cudaMalloc(&d_energies, pixelsSize_1channels));
