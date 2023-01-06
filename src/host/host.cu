@@ -150,14 +150,11 @@ int main(int argc, char ** argv) {
     char * outFileNameBase = strtok(argv[2], ".");
     int nSeams = atoi(argv[3]);
 
-    for (int i = 0; i < 1; i++)
-    {
 
-        timer.Start();
-        applySeamCarving(inPixels, width, height, nSeams, outPixels);
-        timer.Stop();
+    timer.Start();
+    applySeamCarving(inPixels, width, height, nSeams, outPixels);
+    timer.Stop();
 
-        printf("Version host, seams: %d, time: %f ms\n", nSeams, timer.Elapsed());
-        writePnm(outPixels, width - nSeams, height, concatStr(outFileNameBase, "_host.pnm"));
-    }
+    printf("Version host, seams: %d, time: %f ms\n", nSeams, timer.Elapsed());
+    writePnm(outPixels, width - nSeams, height, concatStr(outFileNameBase, "_host.pnm"));
 }

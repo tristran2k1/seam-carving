@@ -212,16 +212,13 @@ int main(int argc, char ** argv) {
     readPnm(argv[1], width, height, inPixels);
     char * outFileNameBase = strtok(argv[2], ".");
 
-    for (int i = 0; i < 1; i++)
-    {
 
-        timer.Start();
-        applySeamCarving(inPixels, width, height, nSeams, outPixels, blocksize);
-        timer.Stop();
+    timer.Start();
+    applySeamCarving(inPixels, width, height, nSeams, outPixels, blocksize);
+    timer.Stop();
 
-        float kernelTime = timer.Elapsed();
-        printf("Version GPU 2, seams: %d, time: %f ms\n", nSeams, kernelTime);
+    float kernelTime = timer.Elapsed();
+    printf("Version GPU 2, seams: %d, time: %f ms\n", nSeams, kernelTime);
 
-        writePnm(outPixels, width - nSeams, height,  concatStr(outFileNameBase, "_dv2.pnm"));
-    }
+    writePnm(outPixels, width - nSeams, height,  concatStr(outFileNameBase, "_dv2.pnm"));
 }
