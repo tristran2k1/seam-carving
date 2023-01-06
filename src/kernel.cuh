@@ -12,36 +12,6 @@ __constant__ float DEVICE_BLUR_KERNEL[BLUR_KERNEL_SIZE * BLUR_KERNEL_SIZE];
 __constant__ float DEVICE_SOBELX_KERNEL[SOBEL_KERNEL_SIZE * SOBEL_KERNEL_SIZE];
 __constant__ float DEVICE_SOBELY_KERNEL[SOBEL_KERNEL_SIZE * SOBEL_KERNEL_SIZE];
 
-__global__ void blurImg_kernel(int *inPixels, int width, int height, int *outPixels)
-{
-    int ix = threadIdx.x + blockIdx.x * blockDim.x;
-    int iy = threadIdx.y + blockIdx.y * blockDim.y;
-
-    // apply convolution on each pixel
-    if (ix < width && iy < height)
-    {
-        int idx_1d = iy * width + ix;
-        int ele = 0;
-
-        for (int dy = -BLUR_KERNEL_SIZE / 2; dy <= BLUR_KERNEL_SIZE / 2; dy++)
-        {
-            for (int dx = -BLUR_KERNEL_SIZE / 2; dx <= BLUR_KERNEL_SIZE / 2; dx++)
-            {
-
-                int conv_x = max(min(ix + dx, width - 1), 0);
-                int conv_y = max(min(iy + dy, height - 1), 0);
-                int filter_x = dx + BLUR_KERNEL_SIZE / 2;
-                int filter_y = dy + BLUR_KERNEL_SIZE / 2;
-                float ele_conv = DEVICE_BLUR_KERNEL[filter_y * BLUR_KERNEL_SIZE + filter_x];
-
-                ele += int(inPixels[conv_y * width + conv_x] * ele_conv);
-            }
-        }
-
-        outPixels[idx_1d] = ele;
-    }
-}
-
 void createGaussianFilter(float *&filter)
 {
     /*
