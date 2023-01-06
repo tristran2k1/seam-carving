@@ -6,31 +6,54 @@
 
 __global__ void blurImg_kernel_v2(int *inPixels, int width, int height, int *outPixels)
 {
+    extern __shared__ int s_inPixels[];
+    int sDim_x = blockDim.x + BLUR_KERNEL_SIZE - 1;
+    int sDim_y = blockDim.y + BLUR_KERNEL_SIZE - 1;
     int ix = threadIdx.x + blockIdx.x * blockDim.x;
     int iy = threadIdx.y + blockIdx.y * blockDim.y;
+    int idx_1d = iy * width + ix;
 
-    // apply convolution on each pixel
+    // Copy additional area (used when applying conv on boundary pixels) to smem
+    int nGlobalBlockPerShareBlock = (sDim_x * sDim_y) / (blockDim.x * blockDim.y);
+    for (int i = 0; i <= nGlobalBlockPerShareBlock; i++)
+    {
+        int gIdx = threadIdx.y * blockDim.x + threadIdx.x + i * (blockDim.x * blockDim.y);
+        int sIdx_y = gIdx / sDim_x;
+        int sIdx_x = gIdx % sDim_x;
+
+        int gIdx_x = sIdx_x - BLUR_KERNEL_SIZE / 2 + blockIdx.x * blockDim.x;
+        int gIdx_y = sIdx_y - BLUR_KERNEL_SIZE / 2 + blockIdx.y * blockDim.y;
+        int gIdx_1d = max(0, min(height - 1, gIdx_y)) * width + max(0, min(width - 1, gIdx_x));
+
+        if (sIdx_x < sDim_x && sIdx_y < sDim_y)
+            s_inPixels[sIdx_y * sDim_x + sIdx_x] = inPixels[gIdx_1d];
+    }
+
+    __syncthreads();
+
+    // Calculate conv on smem
+    int ele = 0;
+
     if (ix < width && iy < height)
     {
-        int idx_1d = iy * width + ix;
-        int ele = 0;
-
         for (int dy = -BLUR_KERNEL_SIZE / 2; dy <= BLUR_KERNEL_SIZE / 2; dy++)
         {
             for (int dx = -BLUR_KERNEL_SIZE / 2; dx <= BLUR_KERNEL_SIZE / 2; dx++)
             {
+                // mapping coordinate
+                int conv_x = threadIdx.x + BLUR_KERNEL_SIZE / 2 + dx;
+                int conv_y = threadIdx.y + BLUR_KERNEL_SIZE / 2 + dy;
 
-                int conv_x = max(min(ix + dx, width - 1), 0);
-                int conv_y = max(min(iy + dy, height - 1), 0);
                 int filter_x = dx + BLUR_KERNEL_SIZE / 2;
                 int filter_y = dy + BLUR_KERNEL_SIZE / 2;
+
+                int inPixel = s_inPixels[conv_y * sDim_x + conv_x];
                 float ele_conv = DEVICE_BLUR_KERNEL[filter_y * BLUR_KERNEL_SIZE + filter_x];
 
-                ele += int(inPixels[conv_y * width + conv_x] * ele_conv);
+                ele += int(inPixel * ele_conv);
             }
         }
-
-        outPixels[idx_1d] = ele;
+        outPixels[idx_1d] = (int)ele;
     }
 }
 

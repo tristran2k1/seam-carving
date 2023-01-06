@@ -155,7 +155,7 @@ void applySeamCarving(uchar3 *inPixels, int width, int height, int nSeams, uchar
     float *gaussFilter;
     createGaussianFilter(gaussFilter);
 
-    // copy data to CMEM
+    // copy data
     CHECK(cudaMemcpyToSymbol(DEVICE_BLUR_KERNEL, gaussFilter, BLUR_KERNEL_SIZE * BLUR_KERNEL_SIZE * sizeof(float)));
     CHECK(cudaMemcpyToSymbol(DEVICE_SOBELX_KERNEL, gx, SOBEL_KERNEL_SIZE * SOBEL_KERNEL_SIZE * sizeof(float)));
     CHECK(cudaMemcpyToSymbol(DEVICE_SOBELY_KERNEL, gy, SOBEL_KERNEL_SIZE * SOBEL_KERNEL_SIZE * sizeof(float)));
