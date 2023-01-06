@@ -157,7 +157,7 @@ int main(int argc, char ** argv) {
         applySeamCarving(inPixels, width, height, nSeams, outPixels);
         timer.Stop();
 
-        printf("Version CPU, %d seams: %f ms\n", nSeams, timer.Elapsed());
+        printf("Version host, seams: %d, time: %f ms\n", nSeams, timer.Elapsed());
         writePnm(outPixels, width - nSeams, height, concatStr(outFileNameBase, "_host.pnm"));
     }
 }

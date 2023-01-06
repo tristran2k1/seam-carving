@@ -196,7 +196,7 @@ int main(int argc, char ** argv) {
         timer.Stop();
 
         float kernelTime = timer.Elapsed();
-        printf("Version GPU 1, %d seams: %f ms\n", nSeams, kernelTime);
+        printf("Version GPU 1, seams: %d, time: %f ms\n", nSeams, kernelTime);
 
         writePnm(outPixels, width - nSeams, height,  concatStr(outFileNameBase, "_dv1.pnm"));
     }

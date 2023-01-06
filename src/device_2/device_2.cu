@@ -220,7 +220,7 @@ int main(int argc, char ** argv) {
         timer.Stop();
 
         float kernelTime = timer.Elapsed();
-        printf("Version GPU 2, %d seams: %f ms\n", nSeams, kernelTime);
+        printf("Version GPU 2, seams: %d, time: %f ms\n", nSeams, kernelTime);
 
         writePnm(outPixels, width - nSeams, height,  concatStr(outFileNameBase, "_dv2.pnm"));
     }
