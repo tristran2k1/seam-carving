@@ -140,6 +140,7 @@ void applySeamCarving(uchar3 *inPixels, int width, int height, int nSeams, uchar
 }
 
 int main(int argc, char ** argv) {
+    printDeviceInfo();
     GpuTimer timer;
 
     int width, height;
