@@ -36,13 +36,14 @@ void createGaussianFilter(float *&filter)
 void createSobelFilters(float *&gx, float *&gy)
 {
     /*
+    gx =    [-1,-2,-1] 
+            [ 0, 0, 0] 
+            [ 1, 2, 1] 
+
     gy =    [-1, 0, 1] 
             [-2, 0, 2] 
             [-1, 0, 1] 
             
-    gx =    [-1,-2,-1] 
-            [ 0, 0, 0] 
-            [ 1, 2, 1] 
     
     G = |gx| + |gy|
 
